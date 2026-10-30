@@ -55,9 +55,9 @@ export default function App() {
   const activeApiKey = apiKeys[selectedProvider] || '';
   const currentProviderObj = LLM_PROVIDERS.find(p => p.id === selectedProvider) || LLM_PROVIDERS[0];
 
-  // --- Student Form State (First name only, Music default) ---
+  // --- Student Form State (First name only, Gender for pronouns) ---
   const [studentName, setStudentName] = useState('');
-  const [subject, setSubject] = useState('Music');
+  const [gender, setGender] = useState('Female');
   
   // Grade as float value from 1.0 (best) to 5.0 (worst)
   const [grade, setGrade] = useState(1.5);
@@ -226,6 +226,7 @@ export default function App() {
       apiKey: activeApiKey,
       model: selectedModel,
       studentName: firstNameOnly,
+      gender,
       subject: 'Music',
       grade: parsedGrade.toFixed(1),
       wordLimit,
@@ -292,6 +293,7 @@ export default function App() {
     const newEntry = {
       id: Date.now(),
       studentName: firstNameOnly,
+      gender,
       subject: 'Music',
       grade: parsedGrade.toFixed(1),
       text: generatedText,
@@ -387,24 +389,18 @@ export default function App() {
             </div>
 
             <div className="form-group">
-              <label className="form-label" htmlFor="subject-select">
-                Subject
+              <label className="form-label" htmlFor="gender-select">
+                Gender
+                <span className="hint">For pronouns</span>
               </label>
               <select
-                id="subject-select"
+                id="gender-select"
                 className="form-select"
-                value={subject}
-                onChange={e => setSubject(e.target.value)}
+                value={gender}
+                onChange={e => setGender(e.target.value)}
               >
-                <option value="Music">Music</option>
-                <option value="English Literature" disabled>English / Language Arts (Locked)</option>
-                <option value="Mathematics" disabled>Mathematics (Locked)</option>
-                <option value="Science" disabled>Science (Locked)</option>
-                <option value="Social Studies" disabled>Social Studies (Locked)</option>
-                <option value="Art & Design" disabled>Art & Design (Locked)</option>
-                <option value="Physical Education" disabled>Physical Education (Locked)</option>
-                <option value="General Homeroom" disabled>General Homeroom (Locked)</option>
-                <option value="Other" disabled>Other (Locked)</option>
+                <option value="Female">Female (she / her / hers)</option>
+                <option value="Male">Male (he / him / his)</option>
               </select>
             </div>
           </div>
@@ -773,7 +769,7 @@ export default function App() {
                   <div key={entry.id} className="history-item">
                     <div className="history-info">
                       <span className="history-name">{entry.studentName}</span>
-                      <span className="history-meta">{entry.subject} • Grade {entry.grade} • {entry.wordCount} words • {entry.timestamp}</span>
+                      <span className="history-meta">{entry.gender || 'Student'} • Grade {entry.grade} • {entry.wordCount} words • {entry.timestamp}</span>
                     </div>
                     <div className="history-actions">
                       <button
@@ -781,6 +777,7 @@ export default function App() {
                         onClick={() => {
                           setGeneratedText(entry.text);
                           setStudentName(entry.studentName);
+                          if (entry.gender) setGender(entry.gender);
                           showToast(`Loaded evaluation for ${entry.studentName}`);
                         }}
                         title="Load into editor"

@@ -122,6 +122,7 @@ export async function generateStudentEvaluation(params, signal = null) {
     apiKey,
     model = 'gemini-3.8-flash',
     studentName = 'The student',
+    gender = 'Female',
     subject = 'Music',
     grade = 1.0,
     wordLimit = 120,
@@ -142,7 +143,8 @@ export async function generateStudentEvaluation(params, signal = null) {
 
   const prompt = buildEvaluationPrompt({
     studentName,
-    subject,
+    gender,
+    subject: 'Music',
     grade,
     wordLimit,
     tone,
@@ -311,6 +313,11 @@ async function callOpenAICompatibleAPI({ endpoint, apiKey, model, prompt, signal
 }
 
 function buildEvaluationPrompt(p) {
+  const isMale = (p.gender || '').toLowerCase() === 'male';
+  const pronouns = isMale ? 'he / him / his / himself' : 'she / her / hers / herself';
+  const subjectPronoun = isMale ? 'he' : 'she';
+  const possessivePronoun = isMale ? 'his' : 'her';
+
   const categoriesText = CATEGORY_DEFINITIONS.map(cat => {
     const userCat = p.categories[cat.id];
     const score = userCat?.score || 3;
@@ -341,10 +348,11 @@ You are an expert, compassionate, and articulate school teacher writing an indiv
 
 STUDENT PROFILE:
 - Student Name: ${p.studentName} (FIRST NAME ONLY. The student is a child aged 6–12. Never invent or use any surname/last name; refer to the child solely by their first name).
-- Subject: ${p.subject} (Music education, singing, rhythm, listening, and ensemble activities for kids aged 6–12).
+- Student Gender: ${p.gender || 'Female'} (CRITICAL GRAMMAR RULE: Use ${pronouns} pronouns strictly throughout the evaluation. For example: "${p.studentName} showed great enthusiasm when ${subjectPronoun} practiced...", "in ${possessivePronoun} ensemble work...").
+- Subject: Music (Music education, singing, rhythm, listening, instruments, and ensemble activities for kids aged 6–12).
 - Overall Academic Grade: ${p.grade} on a 1.0 to 5.0 scale (where 1.0 is the best / highest mark like Czech 'výborný', and 5.0 is failing / lowest mark)
 - Desired Length: Approximately ${p.wordLimit} words (Strict constraint: stay within ${Math.max(30, p.wordLimit - 20)} to ${p.wordLimit + 20} words).
-- Target Audience & Voice: Written to the child's parents in the third person (referring to the child solely by first name: "${p.studentName} demonstrates...", "We are delighted by ${p.studentName}'s enthusiasm...").
+- Target Audience & Voice: Written to the child's parents in the third person (referring to the child by first name and using accurate ${p.gender || 'Female'} pronouns).
 - Tone: Warm, constructive, encouraging, age-appropriate for 6–12 year olds.
 
 PEDAGOGICAL ASSESSMENT PILLARS:
@@ -358,14 +366,15 @@ ${refinementText}
 
 EVALUATION WRITING GUIDELINES:
 1. Standard Pedagogical Flow:
-   - Opening: Acknowledge the student's presence and overall performance in ${p.subject}.
-   - Core Body: Synthesize their academic comprehension, effort, participation, and social collaboration.
+   - Opening: Acknowledge the student's presence and overall performance in Music class.
+   - Core Body: Synthesize their musical comprehension, effort, participation, and social collaboration.
    - Growth & Next Steps: Constructively and warmly address areas for improvement and state the next-step recommendation.
    - Closing: An encouraging, forward-looking concluding sentence.
 2. Natural, Flowing Prose: Do NOT mechanically list the categories or output bullet points. Blend the teacher's keywords and category levels into smooth, authentic, human sentences.
-3. Constructive Framing: Frame challenges as opportunities for continued growth, maintaining dignity and encouragement.
-4. Structural Completeness: You must provide a complete, well-rounded narrative that brings every thought and sentence to a proper, grammatical conclusion. Never stop abruptly or leave sentences incomplete.
-5. Output Format: Return ONLY the final evaluation text. No greeting header ("Dear Parents,"), no title, no meta commentary, no quotation marks.
+3. Pronoun and Grammar Accuracy: Maintain strict consistency with the student's gender (${p.gender || 'Female'}). Use only ${pronouns}.
+4. Constructive Framing: Frame challenges as opportunities for continued growth, maintaining dignity and encouragement.
+5. Structural Completeness: You must provide a complete, well-rounded narrative that brings every thought and sentence to a proper, grammatical conclusion. Never stop abruptly or leave sentences incomplete.
+6. Output Format: Return ONLY the final evaluation text. No greeting header ("Dear Parents,"), no title, no meta commentary, no quotation marks.
 `.trim();
 }
 
@@ -381,8 +390,12 @@ function cleanGeneratedText(text) {
 // Local mock generator for testing without an API key
 function generateLocalDemoEvaluation(p) {
   const firstName = p.studentName ? p.studentName.trim().split(/\s+/)[0] : 'The student';
-  const subject = p.subject || 'Music';
   const wordTarget = p.wordLimit || 120;
+  const isMale = (p.gender || '').toLowerCase() === 'male';
+  const subjPronoun = isMale ? 'he' : 'she';
+  const subjPronounCap = isMale ? 'He' : 'She';
+  const objPronoun = isMale ? 'him' : 'her';
+  const possPronoun = isMale ? 'his' : 'her';
 
   // Extract category chips if selected
   const categoryChips = [];
@@ -406,7 +419,7 @@ function generateLocalDemoEvaluation(p) {
     ? p.goals.join(', ')
     : 'practicing rhythm patterns and singing with confidence in small ensembles';
 
-  const sample = `${firstName} has had a joyful and productive term in ${subject}. Demonstrating an admirable appreciation for musical activities, ${firstName} consistently participates with ${strengths}. During ensemble playing and class singing, ${firstName} is a thoughtful and respectful listener who collaborates cooperatively with peers. While making steady progress throughout the semester, continuing to work on ${growth} will help ${firstName} build even greater musical independence. For the upcoming term, ${firstName} is encouraged to focus on ${goals}. With this positive attitude and dedication, ${firstName} is well positioned for continued musical growth and enjoyment.`;
+  const sample = `${firstName} has had a joyful and productive term in Music. Demonstrating an admirable appreciation for musical activities, ${subjPronoun} consistently participates with ${strengths}. During ensemble playing and class singing, ${firstName} is a thoughtful and respectful listener who collaborates cooperatively with ${possPronoun} peers. While making steady progress throughout the semester, continuing to work on ${growth} will help ${objPronoun} build even greater musical independence. For the upcoming term, ${firstName} is encouraged to focus on ${goals}. With ${possPronoun} positive attitude and dedication, ${subjPronoun} is well positioned for continued musical growth and enjoyment.`;
 
   const words = sample.split(/\s+/);
   if (words.length > wordTarget + 10) {
