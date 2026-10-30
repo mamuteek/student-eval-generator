@@ -1,6 +1,6 @@
 /**
  * Multi-Provider LLM Service for Student Evaluation Generation
- * Supports Google Gemini (v3 & v3.8), Groq (LPU Free Tier), Cerebras (1M Tokens/Day), xAI Grok ($25 Free Trial), and OpenRouter (Auto Free Router)
+ * Supports Google Gemini (v3 & v3.8), Groq (LPU Free Tier), and OpenRouter (Auto Free Router)
  */
 
 export const LLM_PROVIDERS = [
@@ -10,7 +10,7 @@ export const LLM_PROVIDERS = [
     badge: 'Official Google Free Tier',
     keyHelpUrl: 'https://aistudio.google.com/app/apikey',
     keyPlaceholder: 'AIzaSy...',
-    helpText: 'Free tier key from Google AI Studio (no credit card required, generous daily limits).',
+    helpText: 'Free tier key from Google AI Studio.',
     models: [
       { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (Recommended)', desc: 'State-of-the-art speed, reasoning & instruction following' },
       { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', desc: 'Deep pedagogical nuance & complex reasoning' },
@@ -28,31 +28,6 @@ export const LLM_PROVIDERS = [
       { id: 'llama-3.1-8b-instant', name: 'Meta Llama 3.1 8B Instant (Active Free Tier)', desc: '100% active free tier on Groq, ultra-fast 560+ tokens/sec' },
       { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B (32K Context)', desc: 'High-quality open mixture-of-experts model' },
       { id: 'gemma2-9b-it', name: 'Google Gemma 2 9B IT', desc: 'Crisp and reliable student evaluation narrative' },
-    ]
-  },
-  {
-    id: 'cerebras',
-    name: 'Cerebras (Free 1M Tokens/Day)',
-    badge: 'Ultra Fast 2000+ Tok/s, Free',
-    keyHelpUrl: 'https://cloud.cerebras.ai/',
-    keyPlaceholder: 'csk-...',
-    helpText: 'Get 1,000,000 free tokens/day at cloud.cerebras.ai (no credit card required). Record-breaking inference speed.',
-    models: [
-      { id: 'llama3.1-8b', name: 'Meta Llama 3.1 8B (Cerebras Ultra-Fast)', desc: 'Instantaneous evaluation generation at 2000+ tokens/sec' },
-      { id: 'llama-3.3-70b', name: 'Meta Llama 3.3 70B (Cerebras)', desc: 'Full 70B parameter reasoning intelligence' },
-    ]
-  },
-  {
-    id: 'grok',
-    name: 'xAI Grok (Free Trial Credits)',
-    badge: '$25 Free Credit at Sign Up',
-    keyHelpUrl: 'https://console.x.ai/',
-    keyPlaceholder: 'xai-...',
-    helpText: 'Get $25 in free trial API credits upon signup at console.x.ai (no credit card required).',
-    models: [
-      { id: 'grok-2', name: 'Grok 2 (Recommended)', desc: 'High-capability instruction-following and reasoning model' },
-      { id: 'grok-2-mini', name: 'Grok 2 Mini', desc: 'Fast, compact Grok model for quick turnaround' },
-      { id: 'grok-beta', name: 'Grok Beta', desc: 'xAI early preview model' },
     ]
   },
   {
@@ -190,35 +165,11 @@ export async function generateStudentEvaluation(params, signal = null) {
     if (!activeModel || activeModel.includes('llama-3.3-70b-instruct')) {
       activeModel = 'openrouter/free';
     }
-  } else if (provider === 'cerebras') {
-    if (!activeModel || activeModel === 'mistral-small-latest') {
-      activeModel = 'llama3.1-8b';
-    }
-  } else if (provider === 'grok') {
-    if (!activeModel) {
-      activeModel = 'grok-2';
-    }
   }
 
   if (provider === 'groq') {
     return callOpenAICompatibleAPI({
       endpoint: 'https://api.groq.com/openai/v1/chat/completions',
-      apiKey,
-      model: activeModel,
-      prompt,
-      signal
-    });
-  } else if (provider === 'cerebras') {
-    return callOpenAICompatibleAPI({
-      endpoint: 'https://api.cerebras.ai/v1/chat/completions',
-      apiKey,
-      model: activeModel,
-      prompt,
-      signal
-    });
-  } else if (provider === 'grok') {
-    return callOpenAICompatibleAPI({
-      endpoint: 'https://api.x.ai/v1/chat/completions',
       apiKey,
       model: activeModel,
       prompt,
@@ -432,7 +383,7 @@ function generateLocalDemoEvaluation(p) {
   const firstName = p.studentName ? p.studentName.trim().split(/\s+/)[0] : 'The student';
   const subject = p.subject || 'Music';
   const wordTarget = p.wordLimit || 120;
-  
+
   // Extract category chips if selected
   const categoryChips = [];
   if (p.categories) {
@@ -443,16 +394,16 @@ function generateLocalDemoEvaluation(p) {
     });
   }
 
-  const strengths = p.strengths && p.strengths.length > 0 
-    ? p.strengths.join(' and ') 
+  const strengths = p.strengths && p.strengths.length > 0
+    ? p.strengths.join(' and ')
     : (categoryChips.length > 0 ? categoryChips.slice(0, 2).join(' and ') : 'a strong sense of rhythm and musical curiosity');
 
-  const growth = p.weaknesses && p.weaknesses.length > 0 
-    ? p.weaknesses.join(' and ') 
+  const growth = p.weaknesses && p.weaknesses.length > 0
+    ? p.weaknesses.join(' and ')
     : 'reading musical notation and refining fine tempo transitions';
 
-  const goals = p.goals && p.goals.length > 0 
-    ? p.goals.join(', ') 
+  const goals = p.goals && p.goals.length > 0
+    ? p.goals.join(', ')
     : 'practicing rhythm patterns and singing with confidence in small ensembles';
 
   const sample = `${firstName} has had a joyful and productive term in ${subject}. Demonstrating an admirable appreciation for musical activities, ${firstName} consistently participates with ${strengths}. During ensemble playing and class singing, ${firstName} is a thoughtful and respectful listener who collaborates cooperatively with peers. While making steady progress throughout the semester, continuing to work on ${growth} will help ${firstName} build even greater musical independence. For the upcoming term, ${firstName} is encouraged to focus on ${goals}. With this positive attitude and dedication, ${firstName} is well positioned for continued musical growth and enjoyment.`;

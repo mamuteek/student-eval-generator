@@ -12,7 +12,7 @@ export default function App() {
   // --- Persistent Settings (Multi-Provider Support) ---
   const [selectedProvider, setSelectedProvider] = useState(() => {
     const saved = localStorage.getItem('evalcraft_provider');
-    if (saved === 'mistral') return 'gemini';
+    if (saved === 'mistral' || saved === 'cerebras' || saved === 'grok') return 'gemini';
     return saved || 'gemini';
   });
   
@@ -20,17 +20,17 @@ export default function App() {
     try {
       const saved = JSON.parse(localStorage.getItem('evalcraft_api_keys'));
       if (saved && typeof saved === 'object') {
-        const { mistral, ...rest } = saved;
-        return { gemini: '', groq: '', cerebras: '', grok: '', openrouter: '', ...rest };
+        const { mistral, cerebras, grok, ...rest } = saved;
+        return { gemini: '', groq: '', openrouter: '', ...rest };
       }
     } catch {}
     const oldKey = localStorage.getItem('evalcraft_gemini_key') || '';
-    return { gemini: oldKey, groq: '', cerebras: '', grok: '', openrouter: '' };
+    return { gemini: oldKey, groq: '', openrouter: '' };
   });
 
   const [selectedModel, setSelectedModel] = useState(() => {
     const saved = localStorage.getItem('evalcraft_gemini_model');
-    if (!saved || saved === 'gemini-2.0-flash' || saved === 'gemini-1.5-flash' || saved === 'mistral-small-latest') {
+    if (!saved || saved === 'gemini-2.0-flash' || saved === 'gemini-1.5-flash' || saved === 'mistral-small-latest' || saved === 'llama3.1-8b' || saved === 'llama-3.3-70b' || saved?.startsWith('grok-')) {
       return 'gemini-3.8-flash';
     }
     if (saved === 'llama-3.3-70b-versatile') {
@@ -96,7 +96,8 @@ export default function App() {
   // Sync modal state when settings modal opens
   useEffect(() => {
     if (showSettings) {
-      const prov = selectedProvider === 'mistral' ? 'gemini' : selectedProvider;
+      const validProvs = ['gemini', 'groq', 'openrouter'];
+      const prov = validProvs.includes(selectedProvider) ? selectedProvider : 'gemini';
       setModalProvider(prov);
       setModalKey(apiKeys[prov] || '');
       const provObj = LLM_PROVIDERS.find(p => p.id === prov);
@@ -262,7 +263,7 @@ export default function App() {
           `Your Gemini API key belongs to a Google Cloud project with depleted prepay credits.\n\n` +
           `Quick Options:\n` +
           `1. In Google AI Studio (aistudio.google.com/app/apikey), click 'Create in NEW project' for a 100% free tier key.\n` +
-          `2. Or switch to Groq, Cerebras, Grok, or OpenRouter in Settings for instant free generation!`
+          `2. Or switch to Groq (console.groq.com) or OpenRouter (openrouter.ai) in Settings for instant free generation!`
         );
       } else {
         alert(`Generation failed: ${err.message}\n\nPlease check your ${currentProviderObj.name} API key in Settings.`);
@@ -360,7 +361,7 @@ export default function App() {
           {!activeApiKey && (
             <div className="api-key-banner">
               <div>
-                <strong>Demo Mode Active:</strong> You can test all inputs and sample generation immediately! To unlock full AI generations, add a free API key in Settings (supports Gemini 3.8, Groq LPU, Cerebras, Grok, and OpenRouter).
+                <strong>Demo Mode Active:</strong> You can test all inputs and sample generation immediately! To unlock full AI generations, add a free API key in Settings (supports Gemini 3.8, Groq LPU, and OpenRouter).
               </div>
               <button className="btn btn-primary btn-sm" onClick={() => setShowSettings(true)}>
                 Add Key (Free)
