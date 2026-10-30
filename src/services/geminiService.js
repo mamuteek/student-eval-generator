@@ -1,6 +1,6 @@
 /**
  * Multi-Provider LLM Service for Student Evaluation Generation
- * Supports Google Gemini (v3 & v3.8), Groq (LPU Free Tier), OpenRouter (Free Tier), and Mistral AI
+ * Supports Google Gemini (v3 & v3.8), Groq (LPU Free Tier), Cerebras (1M Tokens/Day), xAI Grok ($25 Free Trial), and OpenRouter (Auto Free Router)
  */
 
 export const LLM_PROVIDERS = [
@@ -23,34 +23,49 @@ export const LLM_PROVIDERS = [
     badge: '100% Free, Blazing Fast',
     keyHelpUrl: 'https://console.groq.com/keys',
     keyPlaceholder: 'gsk_...',
-    helpText: 'Get a 100% free API key instantly at console.groq.com (no credit card required). Ultra-fast generation on Meta Llama models.',
+    helpText: '100% free API key instantly at console.groq.com (no credit card required). Active free model with 14,400 requests/day.',
     models: [
-      { id: 'llama-3.3-70b-versatile', name: 'Meta Llama 3.3 70B (Recommended for Groq)', desc: 'Flagship open intelligence, exceptional writing & reasoning' },
-      { id: 'llama-3.1-8b-instant', name: 'Meta Llama 3.1 8B Instant', desc: 'Instant generation for short verbal reports' },
+      { id: 'llama-3.1-8b-instant', name: 'Meta Llama 3.1 8B Instant (Active Free Tier)', desc: '100% active free tier on Groq, ultra-fast 560+ tokens/sec' },
+      { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B (32K Context)', desc: 'High-quality open mixture-of-experts model' },
+      { id: 'gemma2-9b-it', name: 'Google Gemma 2 9B IT', desc: 'Crisp and reliable student evaluation narrative' },
+    ]
+  },
+  {
+    id: 'cerebras',
+    name: 'Cerebras (Free 1M Tokens/Day)',
+    badge: 'Ultra Fast 2000+ Tok/s, Free',
+    keyHelpUrl: 'https://cloud.cerebras.ai/',
+    keyPlaceholder: 'csk-...',
+    helpText: 'Get 1,000,000 free tokens/day at cloud.cerebras.ai (no credit card required). Record-breaking inference speed.',
+    models: [
+      { id: 'llama3.1-8b', name: 'Meta Llama 3.1 8B (Cerebras Ultra-Fast)', desc: 'Instantaneous evaluation generation at 2000+ tokens/sec' },
+      { id: 'llama-3.3-70b', name: 'Meta Llama 3.3 70B (Cerebras)', desc: 'Full 70B parameter reasoning intelligence' },
+    ]
+  },
+  {
+    id: 'grok',
+    name: 'xAI Grok (Free Trial Credits)',
+    badge: '$25 Free Credit at Sign Up',
+    keyHelpUrl: 'https://console.x.ai/',
+    keyPlaceholder: 'xai-...',
+    helpText: 'Get $25 in free trial API credits upon signup at console.x.ai (no credit card required).',
+    models: [
+      { id: 'grok-2', name: 'Grok 2 (Recommended)', desc: 'High-capability instruction-following and reasoning model' },
+      { id: 'grok-2-mini', name: 'Grok 2 Mini', desc: 'Fast, compact Grok model for quick turnaround' },
+      { id: 'grok-beta', name: 'Grok Beta', desc: 'xAI early preview model' },
     ]
   },
   {
     id: 'openrouter',
     name: 'OpenRouter (Free Models)',
-    badge: 'Free Models Hub',
+    badge: 'Auto Free Router',
     keyHelpUrl: 'https://openrouter.ai/keys',
     keyPlaceholder: 'sk-or-v1-...',
-    helpText: 'Get a free API key at openrouter.ai/keys (no credit card required). Grants access to open models ending in :free.',
+    helpText: 'Free API key at openrouter.ai/keys (no credit card required). Uses openrouter/free to automatically route to active free models.',
     models: [
-      { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B Instruct (Free)', desc: 'High quality open model via OpenRouter free tier' },
-      { id: 'deepseek/deepseek-r1:free', name: 'DeepSeek R1 (Free)', desc: 'Reasoning-focused open weights model' },
-      { id: 'qwen/qwen-2.5-72b-instruct:free', name: 'Qwen 2.5 72B (Free)', desc: 'Nuanced multilingual teacher prose' },
-    ]
-  },
-  {
-    id: 'mistral',
-    name: 'Mistral AI (La Plateforme)',
-    badge: 'Free Testing Tier',
-    keyHelpUrl: 'https://console.mistral.ai/api-keys/',
-    keyPlaceholder: '...',
-    helpText: 'Free experimentation tier key from console.mistral.ai (no credit card required).',
-    models: [
-      { id: 'mistral-small-latest', name: 'Mistral Small (Latest)', desc: 'Fast, balanced European language model' },
+      { id: 'openrouter/free', name: 'OpenRouter Auto Free (Recommended)', desc: 'Intelligently routes to currently active free open models ($0.00)' },
+      { id: 'google/gemma-4-31b-it:free', name: 'Google Gemma 4 31B (Free)', desc: 'High capability open model hosted for free' },
+      { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', name: 'NVIDIA Nemotron Reasoning (Free)', desc: 'NVIDIA reasoning open model' },
     ]
   }
 ];
@@ -165,11 +180,47 @@ export async function generateStudentEvaluation(params, signal = null) {
     previousEvaluation
   });
 
+  // Sanitize model selections in case old deprecated IDs were saved in localStorage
+  let activeModel = model;
+  if (provider === 'groq') {
+    if (!activeModel || activeModel === 'llama-3.3-70b-versatile') {
+      activeModel = 'llama-3.1-8b-instant';
+    }
+  } else if (provider === 'openrouter') {
+    if (!activeModel || activeModel.includes('llama-3.3-70b-instruct')) {
+      activeModel = 'openrouter/free';
+    }
+  } else if (provider === 'cerebras') {
+    if (!activeModel || activeModel === 'mistral-small-latest') {
+      activeModel = 'llama3.1-8b';
+    }
+  } else if (provider === 'grok') {
+    if (!activeModel) {
+      activeModel = 'grok-2';
+    }
+  }
+
   if (provider === 'groq') {
     return callOpenAICompatibleAPI({
       endpoint: 'https://api.groq.com/openai/v1/chat/completions',
       apiKey,
-      model: model || 'llama-3.3-70b-versatile',
+      model: activeModel,
+      prompt,
+      signal
+    });
+  } else if (provider === 'cerebras') {
+    return callOpenAICompatibleAPI({
+      endpoint: 'https://api.cerebras.ai/v1/chat/completions',
+      apiKey,
+      model: activeModel,
+      prompt,
+      signal
+    });
+  } else if (provider === 'grok') {
+    return callOpenAICompatibleAPI({
+      endpoint: 'https://api.x.ai/v1/chat/completions',
+      apiKey,
+      model: activeModel,
       prompt,
       signal
     });
@@ -177,7 +228,7 @@ export async function generateStudentEvaluation(params, signal = null) {
     return callOpenAICompatibleAPI({
       endpoint: 'https://openrouter.ai/api/v1/chat/completions',
       apiKey,
-      model: model || 'meta-llama/llama-3.3-70b-instruct:free',
+      model: activeModel,
       prompt,
       signal,
       extraHeaders: {
@@ -185,17 +236,9 @@ export async function generateStudentEvaluation(params, signal = null) {
         'X-Title': "Mamut's Student Evaluator"
       }
     });
-  } else if (provider === 'mistral') {
-    return callOpenAICompatibleAPI({
-      endpoint: 'https://api.mistral.ai/v1/chat/completions',
-      apiKey,
-      model: model || 'mistral-small-latest',
-      prompt,
-      signal
-    });
   } else {
     // Default: Google Gemini
-    return callGeminiAPI({ apiKey, model, prompt, signal });
+    return callGeminiAPI({ apiKey, model: activeModel || 'gemini-3.8-flash', prompt, signal });
   }
 }
 
