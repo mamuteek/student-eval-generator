@@ -7,7 +7,6 @@ export const LLM_PROVIDERS = [
   {
     id: 'gemini',
     name: 'Google Gemini (AI Studio)',
-    badge: 'Official Google Free Tier',
     keyHelpUrl: 'https://aistudio.google.com/app/apikey',
     keyPlaceholder: 'AIzaSy...',
     helpText: 'Free tier key from Google AI Studio.',
@@ -20,10 +19,9 @@ export const LLM_PROVIDERS = [
   {
     id: 'groq',
     name: 'Groq (Free LPU Cloud)',
-    badge: '100% Free, Blazing Fast',
     keyHelpUrl: 'https://console.groq.com/keys',
     keyPlaceholder: 'gsk_...',
-    helpText: '100% free API key instantly at console.groq.com (no credit card required). Active free model with 14,400 requests/day.',
+    helpText: '100% free API key instantly at console.groq.com.',
     models: [
       { id: 'llama-3.1-8b-instant', name: 'Meta Llama 3.1 8B Instant (Active Free Tier)', desc: '100% active free tier on Groq, ultra-fast 560+ tokens/sec' },
       { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B (32K Context)', desc: 'High-quality open mixture-of-experts model' },
@@ -33,10 +31,9 @@ export const LLM_PROVIDERS = [
   {
     id: 'openrouter',
     name: 'OpenRouter (Free Models)',
-    badge: 'Auto Free Router',
     keyHelpUrl: 'https://openrouter.ai/keys',
     keyPlaceholder: 'sk-or-v1-...',
-    helpText: 'Free API key at openrouter.ai/keys (no credit card required). Uses openrouter/free to automatically route to active free models.',
+    helpText: 'Free API key at openrouter.ai/keys.',
     models: [
       { id: 'openrouter/free', name: 'OpenRouter Auto Free (Recommended)', desc: 'Intelligently routes to currently active free open models ($0.00)' },
       { id: 'google/gemma-4-31b-it:free', name: 'Google Gemma 4 31B (Free)', desc: 'High capability open model hosted for free' },
