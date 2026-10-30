@@ -1,14 +1,26 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   CATEGORY_DEFINITIONS, 
+  LLM_PROVIDERS,
   GEMINI_MODELS, 
   generateStudentEvaluation 
 } from './services/geminiService';
 
 export default function App() {
   const abortControllerRef = useRef(null);
-  // --- Persistent Settings (Default to Dark Mode & Gemini 3.8 Flash) ---
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('evalcraft_gemini_key') || '');
+
+  // --- Persistent Settings (Multi-Provider Support) ---
+  const [selectedProvider, setSelectedProvider] = useState(() => localStorage.getItem('evalcraft_provider') || 'gemini');
+  
+  const [apiKeys, setApiKeys] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('evalcraft_api_keys'));
+      if (saved && typeof saved === 'object') return saved;
+    } catch {}
+    const oldKey = localStorage.getItem('evalcraft_gemini_key') || '';
+    return { gemini: oldKey, groq: '', openrouter: '', mistral: '' };
+  });
+
   const [selectedModel, setSelectedModel] = useState(() => {
     const saved = localStorage.getItem('evalcraft_gemini_model');
     if (!saved || saved === 'gemini-2.0-flash' || saved === 'gemini-1.5-flash') {
@@ -16,6 +28,7 @@ export default function App() {
     }
     return saved;
   });
+
   const [theme, setTheme] = useState(() => localStorage.getItem('evalcraft_theme') || 'dark');
   const [savedEvaluations, setSavedEvaluations] = useState(() => {
     try {
@@ -24,6 +37,10 @@ export default function App() {
       return [];
     }
   });
+
+  // Current active key for selected provider
+  const activeApiKey = apiKeys[selectedProvider] || '';
+  const currentProviderObj = LLM_PROVIDERS.find(p => p.id === selectedProvider) || LLM_PROVIDERS[0];
 
   // --- Student Form State (First name only, Music default) ---
   const [studentName, setStudentName] = useState('');
@@ -56,9 +73,21 @@ export default function App() {
   const [generatedText, setGeneratedText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // UI state
+  // UI state & Modal editing state
   const [showSettings, setShowSettings] = useState(false);
+  const [modalProvider, setModalProvider] = useState('gemini');
+  const [modalKey, setModalKey] = useState('');
+  const [modalModel, setModalModel] = useState('gemini-3.8-flash');
   const [toast, setToast] = useState('');
+
+  // Sync modal state when settings modal opens
+  useEffect(() => {
+    if (showSettings) {
+      setModalProvider(selectedProvider);
+      setModalKey(apiKeys[selectedProvider] || '');
+      setModalModel(selectedModel);
+    }
+  }, [showSettings, selectedProvider, selectedModel, apiKeys]);
 
   // Apply Theme
   useEffect(() => {
@@ -72,11 +101,23 @@ export default function App() {
   }, [savedEvaluations]);
 
   // Save Settings
-  const handleSaveSettings = (newKey, newModel) => {
-    setApiKey(newKey);
+  const handleSaveSettings = (provId, newKey, newModel) => {
+    setSelectedProvider(provId);
     setSelectedModel(newModel);
-    localStorage.setItem('evalcraft_gemini_key', newKey);
+
+    const updatedKeys = {
+      ...apiKeys,
+      [provId]: newKey
+    };
+    setApiKeys(updatedKeys);
+
+    localStorage.setItem('evalcraft_provider', provId);
+    localStorage.setItem('evalcraft_api_keys', JSON.stringify(updatedKeys));
     localStorage.setItem('evalcraft_gemini_model', newModel);
+    if (provId === 'gemini') {
+      localStorage.setItem('evalcraft_gemini_key', newKey);
+    }
+
     setShowSettings(false);
     showToast('Settings saved successfully!');
   };
@@ -160,7 +201,8 @@ export default function App() {
     const firstNameOnly = studentName.trim().split(/\s+/)[0] || 'The student';
 
     const params = {
-      apiKey,
+      provider: selectedProvider,
+      apiKey: activeApiKey,
       model: selectedModel,
       studentName: firstNameOnly,
       subject: 'Music',
@@ -197,14 +239,13 @@ export default function App() {
       if (err.message && err.message.includes('prepayment credits are depleted')) {
         alert(
           `Google AI Studio Billing Notice:\n\n` +
-          `Your API key belongs to a Google Cloud project with depleted prepay credits.\n\n` +
-          `Quick Fix (100% Free Tier):\n` +
-          `1. Go to Google AI Studio (aistudio.google.com/app/apikey)\n` +
-          `2. Click 'Create API key' -> 'Create in NEW project' (do not link billing)\n` +
-          `3. Paste the new key in Settings here to use the Free Tier.`
+          `Your Gemini API key belongs to a Google Cloud project with depleted prepay credits.\n\n` +
+          `Quick Options:\n` +
+          `1. In Google AI Studio (aistudio.google.com/app/apikey), click 'Create in NEW project' for a 100% free tier key.\n` +
+          `2. Or switch to Groq (console.groq.com) or OpenRouter (openrouter.ai) in Settings for free instant generation!`
         );
       } else {
-        alert(`Generation failed: ${err.message}\n\nPlease check your Gemini API key in Settings.`);
+        alert(`Generation failed: ${err.message}\n\nPlease check your ${currentProviderObj.name} API key in Settings.`);
       }
     } finally {
       clearTimeout(timeoutId);
@@ -279,7 +320,7 @@ export default function App() {
               className="btn btn-outline btn-sm" 
               onClick={() => setShowSettings(true)}
             >
-              ⚙️ {apiKey ? 'Settings' : 'Set Gemini API Key'}
+              ⚙️ {activeApiKey ? `Settings (${currentProviderObj.name.split(' ')[0]})` : 'Set API Key (Free)'}
             </button>
           </div>
         </div>
@@ -296,10 +337,10 @@ export default function App() {
           </div>
 
           {/* Banner if no API key is entered */}
-          {!apiKey && (
+          {!activeApiKey && (
             <div className="api-key-banner">
               <div>
-                <strong>Demo Mode Active:</strong> You can test all inputs and sample generation immediately! To unlock full Gemini 3.8 Flash generations, add your free API key in Settings.
+                <strong>Demo Mode Active:</strong> You can test all inputs and sample generation immediately! To unlock full AI generations, add a free API key in Settings (supports Gemini 3.8, Groq Llama 3.3, OpenRouter, and Mistral).
               </div>
               <button className="btn btn-primary btn-sm" onClick={() => setShowSettings(true)}>
                 Add Key (Free)
@@ -758,7 +799,7 @@ export default function App() {
           <div className="modal-dialog" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3 style={{ fontSize: '17px', fontWeight: '700', color: 'var(--text-main)' }}>
-                Gemini AI Settings
+                AI Model & Provider Settings
               </h3>
               <button 
                 className="btn btn-ghost btn-sm" 
@@ -770,48 +811,85 @@ export default function App() {
             </div>
 
             <div className="modal-body">
+              {/* Provider Selection */}
               <div className="form-group">
-                <label className="form-label" htmlFor="gemini-key-input">
-                  Google Gemini API Key
+                <label className="form-label" htmlFor="provider-select">
+                  AI Provider
+                  <span className="hint">Free API options</span>
+                </label>
+                <select
+                  id="provider-select"
+                  className="form-select"
+                  value={modalProvider}
+                  onChange={e => {
+                    const newProv = e.target.value;
+                    setModalProvider(newProv);
+                    setModalKey(apiKeys[newProv] || '');
+                    const provObj = LLM_PROVIDERS.find(p => p.id === newProv);
+                    if (provObj && provObj.models.length > 0) {
+                      setModalModel(provObj.models[0].id);
+                    }
+                  }}
+                >
+                  {LLM_PROVIDERS.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — {p.badge}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>
+                  {LLM_PROVIDERS.find(p => p.id === modalProvider)?.helpText}
+                </p>
+              </div>
+
+              {/* API Key */}
+              <div className="form-group" style={{ marginTop: '16px' }}>
+                <label className="form-label" htmlFor="api-key-input">
+                  {LLM_PROVIDERS.find(p => p.id === modalProvider)?.name} API Key
                   <span className="hint">Saved in browser localStorage</span>
                 </label>
                 <input
-                  id="gemini-key-input"
+                  id="api-key-input"
                   type="password"
                   className="form-input"
-                  placeholder="AIzaSy..."
-                  defaultValue={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
+                  placeholder={LLM_PROVIDERS.find(p => p.id === modalProvider)?.keyPlaceholder || 'Enter API Key...'}
+                  value={modalKey}
+                  onChange={e => setModalKey(e.target.value)}
                 />
                 <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>
-                  Need a key? Get one 100% free with generous rate limits at{' '}
+                  Need a key? Get one 100% free at:{' '}
                   <a 
-                    href="https://aistudio.google.com/app/apikey" 
+                    href={LLM_PROVIDERS.find(p => p.id === modalProvider)?.keyHelpUrl} 
                     target="_blank" 
                     rel="noreferrer" 
                     style={{ color: 'var(--primary)', fontWeight: '600' }}
                   >
-                    Google AI Studio
-                  </a>.
+                    {LLM_PROVIDERS.find(p => p.id === modalProvider)?.name} Portal ↗
+                  </a>
                 </p>
               </div>
 
+              {/* Model Select */}
               <div className="form-group" style={{ marginTop: '16px' }}>
                 <label className="form-label" htmlFor="model-select">
-                  Gemini Model
+                  Model
                   <span className="hint">Up-to-date models</span>
                 </label>
                 <select
                   id="model-select"
                   className="form-select"
-                  value={GEMINI_MODELS.some(m => m.id === selectedModel) ? selectedModel : 'custom'}
+                  value={
+                    LLM_PROVIDERS.find(p => p.id === modalProvider)?.models.some(m => m.id === modalModel)
+                      ? modalModel
+                      : 'custom'
+                  }
                   onChange={e => {
                     if (e.target.value !== 'custom') {
-                      setSelectedModel(e.target.value);
+                      setModalModel(e.target.value);
                     }
                   }}
                 >
-                  {GEMINI_MODELS.map(m => (
+                  {LLM_PROVIDERS.find(p => p.id === modalProvider)?.models.map(m => (
                     <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
                   <option value="custom">Custom / Other Model ID...</option>
@@ -825,14 +903,15 @@ export default function App() {
                     id="custom-model-input"
                     type="text"
                     className="form-input"
-                    placeholder="e.g. gemini-3.8-flash"
-                    value={selectedModel}
-                    onChange={e => setSelectedModel(e.target.value.trim())}
+                    placeholder="e.g. gemini-3.8-flash or llama-3.3-70b-versatile"
+                    value={modalModel}
+                    onChange={e => setModalModel(e.target.value.trim())}
                     style={{ fontSize: '13px', fontFamily: 'monospace' }}
                   />
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '6px' }}>
-                  <strong>Gemini 3.8 Flash</strong> is recommended: Google's flagship high-intelligence model providing state-of-the-art reasoning, rapid generation, and nuanced evaluations.
+                  {LLM_PROVIDERS.find(p => p.id === modalProvider)?.models.find(m => m.id === modalModel)?.desc ||
+                   'Custom model configuration active.'}
                 </p>
               </div>
             </div>
@@ -844,7 +923,7 @@ export default function App() {
               <button 
                 id="save-settings-btn"
                 className="btn btn-primary" 
-                onClick={() => handleSaveSettings(apiKey, selectedModel)}
+                onClick={() => handleSaveSettings(modalProvider, modalKey, modalModel)}
               >
                 Save Settings
               </button>

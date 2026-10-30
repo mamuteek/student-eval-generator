@@ -1,16 +1,62 @@
 /**
- * Google Gemini API Service for Student Evaluation Generation
+ * Multi-Provider LLM Service for Student Evaluation Generation
+ * Supports Google Gemini (v3 & v3.8), Groq (LPU Free Tier), OpenRouter (Free Tier), and Mistral AI
  */
 
-export const GEMINI_MODELS = [
-  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (Recommended)', desc: 'State-of-the-art reasoning, fastest & highest quality' },
-  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', desc: 'Deep pedagogical nuance & complex reasoning' },
-  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', desc: 'Next-gen fast preview model' },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: 'Balanced speed & accuracy' },
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', desc: 'Ultra-fast production model' },
-  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Legacy)', desc: 'High quota & stable' },
-  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Legacy)', desc: 'Comprehensive context' },
+export const LLM_PROVIDERS = [
+  {
+    id: 'gemini',
+    name: 'Google Gemini (AI Studio)',
+    badge: 'Official Google Free Tier',
+    keyHelpUrl: 'https://aistudio.google.com/app/apikey',
+    keyPlaceholder: 'AIzaSy...',
+    helpText: 'Free tier key from Google AI Studio (no credit card required, generous daily limits).',
+    models: [
+      { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (Recommended)', desc: 'State-of-the-art speed, reasoning & instruction following' },
+      { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', desc: 'Deep pedagogical nuance & complex reasoning' },
+      { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', desc: 'Next-gen fast preview model' },
+    ]
+  },
+  {
+    id: 'groq',
+    name: 'Groq (Free LPU Cloud)',
+    badge: '100% Free, Blazing Fast',
+    keyHelpUrl: 'https://console.groq.com/keys',
+    keyPlaceholder: 'gsk_...',
+    helpText: 'Get a 100% free API key instantly at console.groq.com (no credit card required). Ultra-fast generation on Meta Llama models.',
+    models: [
+      { id: 'llama-3.3-70b-versatile', name: 'Meta Llama 3.3 70B (Recommended for Groq)', desc: 'Flagship open intelligence, exceptional writing & reasoning' },
+      { id: 'llama-3.1-8b-instant', name: 'Meta Llama 3.1 8B Instant', desc: 'Instant generation for short verbal reports' },
+    ]
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter (Free Models)',
+    badge: 'Free Models Hub',
+    keyHelpUrl: 'https://openrouter.ai/keys',
+    keyPlaceholder: 'sk-or-v1-...',
+    helpText: 'Get a free API key at openrouter.ai/keys (no credit card required). Grants access to open models ending in :free.',
+    models: [
+      { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B Instruct (Free)', desc: 'High quality open model via OpenRouter free tier' },
+      { id: 'deepseek/deepseek-r1:free', name: 'DeepSeek R1 (Free)', desc: 'Reasoning-focused open weights model' },
+      { id: 'qwen/qwen-2.5-72b-instruct:free', name: 'Qwen 2.5 72B (Free)', desc: 'Nuanced multilingual teacher prose' },
+    ]
+  },
+  {
+    id: 'mistral',
+    name: 'Mistral AI (La Plateforme)',
+    badge: 'Free Testing Tier',
+    keyHelpUrl: 'https://console.mistral.ai/api-keys/',
+    keyPlaceholder: '...',
+    helpText: 'Free experimentation tier key from console.mistral.ai (no credit card required).',
+    models: [
+      { id: 'mistral-small-latest', name: 'Mistral Small (Latest)', desc: 'Fast, balanced European language model' },
+    ]
+  }
 ];
+
+// Backward compatibility export
+export const GEMINI_MODELS = LLM_PROVIDERS.find(p => p.id === 'gemini').models;
 
 export const CATEGORY_DEFINITIONS = [
   {
@@ -82,6 +128,7 @@ export const CATEGORY_DEFINITIONS = [
 
 export async function generateStudentEvaluation(params, signal = null) {
   const {
+    provider = 'gemini',
     apiKey,
     model = 'gemini-3.8-flash',
     studentName = 'The student',
@@ -118,6 +165,41 @@ export async function generateStudentEvaluation(params, signal = null) {
     previousEvaluation
   });
 
+  if (provider === 'groq') {
+    return callOpenAICompatibleAPI({
+      endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+      apiKey,
+      model: model || 'llama-3.3-70b-versatile',
+      prompt,
+      signal
+    });
+  } else if (provider === 'openrouter') {
+    return callOpenAICompatibleAPI({
+      endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+      apiKey,
+      model: model || 'meta-llama/llama-3.3-70b-instruct:free',
+      prompt,
+      signal,
+      extraHeaders: {
+        'HTTP-Referer': 'https://mamuteek.github.io/student-eval-generator/',
+        'X-Title': "Mamut's Student Evaluator"
+      }
+    });
+  } else if (provider === 'mistral') {
+    return callOpenAICompatibleAPI({
+      endpoint: 'https://api.mistral.ai/v1/chat/completions',
+      apiKey,
+      model: model || 'mistral-small-latest',
+      prompt,
+      signal
+    });
+  } else {
+    // Default: Google Gemini
+    return callGeminiAPI({ apiKey, model, prompt, signal });
+  }
+}
+
+async function callGeminiAPI({ apiKey, model, prompt, signal }) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
 
   const requestBody = {
@@ -177,6 +259,59 @@ export async function generateStudentEvaluation(params, signal = null) {
       throw err;
     }
     console.error('Error generating evaluation via Gemini:', err);
+    throw err;
+  }
+}
+
+async function callOpenAICompatibleAPI({ endpoint, apiKey, model, prompt, signal, extraHeaders = {} }) {
+  const requestBody = {
+    model,
+    messages: [
+      {
+        role: 'system',
+        content: 'You are an expert school teacher writing an individualized verbal evaluation / report card narrative comment for a student. Return ONLY the final evaluation narrative.'
+      },
+      {
+        role: 'user',
+        content: prompt
+      }
+    ],
+    temperature: 0.7,
+    max_tokens: 2048
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey.trim()}`,
+        ...extraHeaders
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const message = errorData?.error?.message || `API returned status ${response.status}`;
+      throw new Error(message);
+    }
+
+    const data = await response.json();
+    const rawText = data?.choices?.[0]?.message?.content;
+
+    if (!rawText || !rawText.trim()) {
+      throw new Error('LLM API returned an empty response. Please check your model selection or API key.');
+    }
+
+    return cleanGeneratedText(rawText);
+  } catch (err) {
+    if (err.name === 'AbortError' || signal?.aborted) {
+      console.log('LLM request was cancelled.');
+      throw err;
+    }
+    console.error(`Error calling ${endpoint}:`, err);
     throw err;
   }
 }
