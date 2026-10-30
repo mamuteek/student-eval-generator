@@ -199,6 +199,11 @@ async function callGeminiAPI({ apiKey, model, prompt, signal }) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
 
   const requestBody = {
+    system_instruction: {
+      parts: [
+        { text: 'You are an expert school teacher writing an individualized verbal evaluation / report card narrative comment for a student. Write warm, purely descriptive prose. NEVER state numerical grades (e.g. 4.0), score numbers, or rubric level labels in parentheses (like level 2). Return ONLY the final verbal evaluation text.' }
+      ]
+    },
     contents: [
       {
         parts: [
@@ -265,7 +270,7 @@ async function callOpenAICompatibleAPI({ endpoint, apiKey, model, prompt, signal
     messages: [
       {
         role: 'system',
-        content: 'You are an expert school teacher writing an individualized verbal evaluation / report card narrative comment for a student. Return ONLY the final evaluation narrative.'
+        content: 'You are an expert school teacher writing an individualized verbal evaluation / report card narrative comment for a student. Write warm, purely descriptive prose. NEVER state numerical grades (like 4.0 or grade 2), score numbers, or rubric level labels in parentheses (like level 2). Return ONLY the final verbal evaluation narrative.'
       },
       {
         role: 'user',
@@ -322,8 +327,8 @@ function buildEvaluationPrompt(p) {
     const userCat = p.categories[cat.id];
     const score = userCat?.score || 3;
     const levelObj = cat.levels.find(l => l.score === score) || cat.levels[2];
-    const chips = (userCat?.chips && userCat.chips.length > 0) ? `Specific details: ${userCat.chips.join(', ')}` : '';
-    return `- ${cat.name}: Level ${score}/5 (${levelObj.label} - ${levelObj.desc}). ${chips}`;
+    const chips = (userCat?.chips && userCat.chips.length > 0) ? ` Specific teacher observations: ${userCat.chips.join(', ')}.` : '';
+    return `- ${cat.name}: Assessed as "${levelObj.label}" (${levelObj.desc}).${chips}`;
   }).join('\n');
 
   const strengthsStr = p.strengths.length > 0 ? p.strengths.join(', ') : 'Not specified';
@@ -350,12 +355,12 @@ STUDENT PROFILE:
 - Student Name: ${p.studentName} (FIRST NAME ONLY. The student is a child aged 6–12. Never invent or use any surname/last name; refer to the child solely by their first name).
 - Student Gender: ${p.gender || 'Female'} (CRITICAL GRAMMAR RULE: Use ${pronouns} pronouns strictly throughout the evaluation. For example: "${p.studentName} showed great enthusiasm when ${subjectPronoun} practiced...", "in ${possessivePronoun} ensemble work...").
 - Subject: Music (Music education, singing, rhythm, listening, instruments, and ensemble activities for kids aged 6–12).
-- Overall Academic Grade: ${p.grade} on a 1.0 to 5.0 scale (where 1.0 is the best / highest mark like Czech 'výborný', and 5.0 is failing / lowest mark)
+- Internal Academic Baseline: Qualitative performance benchmark is grade ${p.grade} (Reference: 1.0 is highest/outstanding, 5.0 is failing. STRICT REQUIREMENT: This number is solely for your internal calibration of academic standing; DO NOT write the number, grade, or scale anywhere in the evaluation narrative!).
 - Desired Length: Approximately ${p.wordLimit} words (Strict constraint: stay within ${Math.max(30, p.wordLimit - 20)} to ${p.wordLimit + 20} words).
 - Target Audience & Voice: Written to the child's parents in the third person (referring to the child by first name and using accurate ${p.gender || 'Female'} pronouns).
 - Tone: Warm, constructive, encouraging, age-appropriate for 6–12 year olds.
 
-PEDAGOGICAL ASSESSMENT PILLARS:
+TEACHER'S ASSESSMENT CRITERIA (INTERNAL QUALITATIVE OBSERVATIONS):
 ${categoriesText}
 
 ADDITIONAL TEACHER OBSERVATIONS & KEYWORDS:
@@ -365,16 +370,20 @@ ADDITIONAL TEACHER OBSERVATIONS & KEYWORDS:
 ${refinementText}
 
 EVALUATION WRITING GUIDELINES:
-1. Standard Pedagogical Flow:
+1. STRICT PROHIBITION ON NUMBERS, GRADES & RUBRIC LABELS:
+   - NEVER state any numerical grades or marks (e.g. NEVER write "earned a 4.0", "4.0 on the scale", "grade 4", or mention numeric marks).
+   - NEVER write rubric level labels or numbers in parentheses (e.g. NEVER write "(level 2)", "(work-ethics level 2)", "(social level 4)", "(growth level 1)", or "Level X").
+   - Instead, translate every assessment into smooth, natural, qualitative prose (e.g. "${p.studentName}'s musical comprehension is developing nicely as ${subjectPronoun} grasps new melodies", "In group activities, ${subjectPronoun} is a collaborative and respectful peer...").
+2. Standard Pedagogical Flow:
    - Opening: Acknowledge the student's presence and overall performance in Music class.
-   - Core Body: Synthesize their musical comprehension, effort, participation, and social collaboration.
+   - Core Body: Synthesize their musical comprehension, effort, participation, and social collaboration in descriptive terms.
    - Growth & Next Steps: Constructively and warmly address areas for improvement and state the next-step recommendation.
    - Closing: An encouraging, forward-looking concluding sentence.
-2. Natural, Flowing Prose: Do NOT mechanically list the categories or output bullet points. Blend the teacher's keywords and category levels into smooth, authentic, human sentences.
-3. Pronoun and Grammar Accuracy: Maintain strict consistency with the student's gender (${p.gender || 'Female'}). Use only ${pronouns}.
-4. Constructive Framing: Frame challenges as opportunities for continued growth, maintaining dignity and encouragement.
-5. Structural Completeness: You must provide a complete, well-rounded narrative that brings every thought and sentence to a proper, grammatical conclusion. Never stop abruptly or leave sentences incomplete.
-6. Output Format: Return ONLY the final evaluation text. No greeting header ("Dear Parents,"), no title, no meta commentary, no quotation marks.
+3. Natural, Flowing Prose: Do NOT mechanically list categories or use bullet points. Blend the teacher's keywords and observations into smooth, authentic, human prose.
+4. Pronoun and Grammar Accuracy: Maintain strict consistency with the student's gender (${p.gender || 'Female'}). Use only ${pronouns}.
+5. Constructive Framing: Frame challenges as opportunities for continued growth, maintaining dignity and encouragement.
+6. Structural Completeness: You must provide a complete, well-rounded narrative that brings every thought and sentence to a proper, grammatical conclusion. Never stop abruptly or leave sentences incomplete.
+7. Output Format: Return ONLY the final verbal evaluation narrative. No greeting header ("Dear Parents,"), no title, no meta commentary, no quotation marks.
 `.trim();
 }
 
@@ -384,6 +393,10 @@ function cleanGeneratedText(text) {
     .replace(/^```[a-z]*\n?/i, '')
     .replace(/\n?```$/i, '')
     .replace(/^"|"$/g, '')
+    // Defensive cleanup: remove any leaked level tags like (level 2), (social level 4), (work-ethics level 2)
+    .replace(/\s*\([a-z\s-]*\blevel\s*\d+(\/\d+)?\)/gi, '')
+    // Clean up any double spaces left behind
+    .replace(/ {2,}/g, ' ')
     .trim();
 }
 
