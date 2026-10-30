@@ -575,6 +575,28 @@ body {
   color: var(--text-main);
 }
 
+.btn-cancel {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+  color: #ef4444;
+  font-weight: 700;
+  animation: pulse-cancel 1.5s infinite;
+}
+
+.btn-cancel:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+@keyframes pulse-cancel {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.15);
+  }
+}
+
 /* Output Card Area */
 .output-card {
   position: sticky;

@@ -80,7 +80,7 @@ export const CATEGORY_DEFINITIONS = [
   }
 ];
 
-export async function generateStudentEvaluation(params) {
+export async function generateStudentEvaluation(params, signal = null) {
   const {
     apiKey,
     model = 'gemini-3.8-flash',
@@ -139,6 +139,7 @@ export async function generateStudentEvaluation(params) {
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
+      signal,
       headers: {
         'Content-Type': 'application/json'
       },
@@ -171,6 +172,10 @@ export async function generateStudentEvaluation(params) {
 
     return cleanGeneratedText(rawText);
   } catch (err) {
+    if (err.name === 'AbortError' || signal?.aborted) {
+      console.log('Gemini request was cancelled.');
+      throw err;
+    }
     console.error('Error generating evaluation via Gemini:', err);
     throw err;
   }

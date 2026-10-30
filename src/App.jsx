@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   CATEGORY_DEFINITIONS, 
   GEMINI_MODELS, 
@@ -6,6 +6,7 @@ import {
 } from './services/geminiService';
 
 export default function App() {
+  const abortControllerRef = useRef(null);
   // --- Persistent Settings (Default to Dark Mode & Gemini 3.8 Flash) ---
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('evalcraft_gemini_key') || '');
   const [selectedModel, setSelectedModel] = useState(() => {
@@ -134,12 +135,28 @@ export default function App() {
 
   const charCount = generatedText.length;
 
+  const handleCancelGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsGenerating(false);
+    showToast('Generation cancelled.');
+  };
+
   // --- Generation Logic ---
   const handleGenerate = async (refinementInstruction = null) => {
+    // If generation is already underway, clicking toggles cancel/stop!
+    if (isGenerating) {
+      handleCancelGeneration();
+      return;
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setIsGenerating(true);
 
     const parsedGrade = parseFloat(grade) || 1.0;
-
     const firstNameOnly = studentName.trim().split(/\s+/)[0] || 'The student';
 
     const params = {
@@ -159,11 +176,23 @@ export default function App() {
       previousEvaluation: generatedText
     };
 
+    // Auto timeout after 40 seconds to prevent getting permanently stuck
+    const timeoutId = setTimeout(() => {
+      if (abortControllerRef.current === controller) {
+        controller.abort();
+        showToast('Generation timed out. You can retry with a different model.');
+      }
+    }, 40000);
+
     try {
-      const result = await generateStudentEvaluation(params);
+      const result = await generateStudentEvaluation(params, controller.signal);
       setGeneratedText(result);
       showToast(refinementInstruction ? 'Evaluation updated!' : 'Evaluation generated!');
     } catch (err) {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
+        showToast('Generation cancelled.');
+        return;
+      }
       console.error(err);
       if (err.message && err.message.includes('prepayment credits are depleted')) {
         alert(
@@ -178,6 +207,10 @@ export default function App() {
         alert(`Generation failed: ${err.message}\n\nPlease check your Gemini API key in Settings.`);
       }
     } finally {
+      clearTimeout(timeoutId);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setIsGenerating(false);
     }
   };
@@ -533,18 +566,19 @@ export default function App() {
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button
                   id="generate-eval-btn"
-                  className="btn btn-primary btn-sm"
+                  type="button"
+                  className={`btn btn-sm ${isGenerating ? 'btn-cancel' : 'btn-primary'}`}
                   onClick={() => handleGenerate()}
-                  disabled={isGenerating}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 14px' }}
+                  title={isGenerating ? 'Click to cancel stuck generation' : 'Generate verbal evaluation'}
                 >
-                  {isGenerating ? 'Generating...' : '✨ Generate'}
+                  {isGenerating ? '⏹️ Cancel' : '✨ Generate'}
                 </button>
                 <button
                   id="save-eval-btn"
                   className="btn btn-outline btn-sm"
                   onClick={handleSaveToHistory}
-                  disabled={!generatedText}
+                  disabled={!generatedText || isGenerating}
                 >
                   💾 Save
                 </button>
@@ -552,10 +586,27 @@ export default function App() {
                   id="copy-eval-btn"
                   className="btn btn-outline btn-sm"
                   onClick={handleCopy}
-                  disabled={!generatedText}
+                  disabled={!generatedText || isGenerating}
                 >
                   📋 Copy
                 </button>
+                {generatedText && (
+                  <button
+                    id="reset-eval-btn"
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      if (confirm('Clear current generated text?')) {
+                        setGeneratedText('');
+                      }
+                    }}
+                    disabled={isGenerating}
+                    title="Clear current text"
+                    style={{ fontSize: '12px', color: 'var(--text-dim)' }}
+                  >
+                    Reset
+                  </button>
+                )}
               </div>
             </div>
 
