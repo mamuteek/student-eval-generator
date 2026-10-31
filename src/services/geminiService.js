@@ -121,7 +121,7 @@ export async function generateStudentEvaluation(params, signal = null) {
     studentName = 'The student',
     gender = 'Female',
     subject = 'Music',
-    grade = 1.0,
+    grade = 'S',
     charLimit = 800,
     tone = 'Warm, balanced, and constructive',
     perspective = 'To Parents (3rd person, referring to student by first name only)',
@@ -352,7 +352,7 @@ STUDENT PROFILE:
 - Student Name: ${p.studentName} (FIRST NAME ONLY. The student is a child aged 6–12. Never invent or use any surname/last name; refer to the child solely by their first name).
 - Student Gender: ${p.gender || 'Female'} (CRITICAL GRAMMAR RULE: Use ${pronouns} pronouns strictly throughout the evaluation. For example: "${p.studentName} showed great enthusiasm when ${subjectPronoun} practiced...", "in ${possessivePronoun} ensemble work...").
 - Subject: Music (Music education, singing, rhythm, listening, instruments, and ensemble activities for kids aged 6–12).
-- Internal Academic Baseline: Qualitative performance benchmark is grade ${p.grade} (Reference: 1.0 is highest/outstanding, 5.0 is failing. STRICT REQUIREMENT: This number is solely for your internal calibration of academic standing; DO NOT write the number, grade, or scale anywhere in the evaluation narrative!).
+- Internal Academic Standing: Performance benchmark is grade "${p.grade || 'S'}" (Grading scale reference: Primary grade S = Satisfactory, U = Unsatisfactory; or American letter scale A = Outstanding/Excellent, B = Good/Above Average, C = Average/Satisfactory, D = Developing/Needs Improvement, F = Unsatisfactory/Failing. STRICT REQUIREMENT: This grade is solely for your internal calibration of overall academic standing and tone; NEVER state the letter grade, mark, or scale label anywhere in the evaluation narrative!).
 - STRICT Character Limit: Maximum ${p.charLimit} characters (including all letters, spaces, and punctuation). The narrative MUST NOT exceed ${p.charLimit} characters. Target length: between ${Math.round(p.charLimit * 0.85)} and ${p.charLimit} characters.
 - Target Audience & Voice: Written to the child's parents in the third person (referring to the child by first name and using accurate ${p.gender || 'Female'} pronouns).
 - Tone: Warm, constructive, encouraging, age-appropriate for 6–12 year olds.
@@ -368,7 +368,7 @@ ${refinementText}
 
 EVALUATION WRITING GUIDELINES:
 1. STRICT PROHIBITION ON NUMBERS, GRADES & RUBRIC LABELS:
-   - NEVER state any numerical grades or marks (e.g. NEVER write "earned a 4.0", "4.0 on the scale", "grade 4", or mention numeric marks).
+   - NEVER state any numerical marks or letter grades (e.g. NEVER write "earned an A", "received an S", "grade B", "graded as U", "earned a 4.0", or mention letter grades/marks).
    - NEVER write rubric level labels or numbers in parentheses (e.g. NEVER write "(level 2)", "(work-ethics level 2)", "(social level 4)", "(growth level 1)", or "Level X").
    - Instead, translate every assessment into smooth, natural, qualitative prose (e.g. "${p.studentName}'s musical comprehension is developing nicely as ${subjectPronoun} grasps new melodies", "In group activities, ${subjectPronoun} is a collaborative and respectful peer...").
 2. Standard Pedagogical Flow:
@@ -429,7 +429,11 @@ function generateLocalDemoEvaluation(p) {
     ? p.goals.join(', ')
     : 'practicing rhythm patterns and singing with confidence in small ensembles';
 
-  let sample = `${firstName} has had a joyful and productive term in Music. Demonstrating an admirable appreciation for musical activities, ${subjPronoun} consistently participates with ${strengths}. During ensemble playing and class singing, ${firstName} is a thoughtful and respectful listener who collaborates cooperatively with ${possPronoun} peers. While making steady progress throughout the semester, continuing to work on ${growth} will help ${objPronoun} build even greater musical independence. For the upcoming term, ${firstName} is encouraged to focus on ${goals}. With ${possPronoun} positive attitude and dedication, ${subjPronoun} is well positioned for continued musical growth and enjoyment.`;
+  const isUnsatisfactory = p.grade === 'U' || p.grade === 'F' || p.grade === 'D';
+
+  let sample = isUnsatisfactory
+    ? `${firstName} has shown developing participation in Music this term. While ${subjPronoun} occasionally joins in activities with ${strengths}, ${subjPronoun} requires continuous encouragement and structured guidance to stay focused. During ensemble lessons, continuing to work on ${growth} is essential for ${objPronoun} to build foundational musical habits. For next term, our goal is to support ${firstName} in ${goals}. With steady practice and supportive attention at home and school, ${subjPronoun} can make positive strides forward.`
+    : `${firstName} has had a joyful and productive term in Music. Demonstrating an admirable appreciation for musical activities, ${subjPronoun} consistently participates with ${strengths}. During ensemble playing and class singing, ${firstName} is a thoughtful and respectful listener who collaborates cooperatively with ${possPronoun} peers. While making steady progress throughout the semester, continuing to work on ${growth} will help ${objPronoun} build even greater musical independence. For the upcoming term, ${firstName} is encouraged to focus on ${goals}. With ${possPronoun} positive attitude and dedication, ${subjPronoun} is well positioned for continued musical growth and enjoyment.`;
 
   // Enforce strict character limit without cutting mid-sentence
   if (sample.length > charLimit) {

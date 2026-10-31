@@ -61,8 +61,8 @@ export default function App() {
   const [studentName, setStudentName] = useState('');
   const [gender, setGender] = useState('Female');
   
-  // Grade as float value from 1.0 (best) to 5.0 (worst)
-  const [grade, setGrade] = useState(1.5);
+  // Grade scale: S/U for younger students, A-F (without E) for older students
+  const [grade, setGrade] = useState('S');
   const [charLimit, setCharLimit] = useState(() => {
     const saved = localStorage.getItem('evalcraft_char_limit');
     return saved ? Number(saved) : 800;
@@ -254,7 +254,6 @@ export default function App() {
     setIsGenerating(true);
     setAttemptStatusText('Contacting AI service...');
 
-    const parsedGrade = parseFloat(grade) || 1.0;
     const firstNameOnly = studentName.trim().split(/\s+/)[0] || 'The student';
 
     const params = {
@@ -264,7 +263,7 @@ export default function App() {
       studentName: firstNameOnly,
       gender,
       subject: 'Music',
-      grade: parsedGrade.toFixed(1),
+      grade: grade || 'S',
       charLimit,
       tone: 'Warm, balanced, and constructive',
       perspective: 'To Parents (3rd person, first name only, age 6-12)',
@@ -410,14 +409,13 @@ export default function App() {
   // Save to History
   const handleSaveToHistory = () => {
     if (!generatedText) return;
-    const parsedGrade = parseFloat(grade) || 1.0;
     const firstNameOnly = studentName.trim().split(/\s+/)[0] || 'Student';
     const newEntry = {
       id: Date.now(),
       studentName: firstNameOnly,
       gender,
       subject: 'Music',
-      grade: parsedGrade.toFixed(1),
+      grade: grade || 'S',
       text: generatedText,
       wordCount,
       charCount,
@@ -529,24 +527,31 @@ export default function App() {
             </div>
           </div>
 
-          {/* Grade (Float 1.0 - 5.0) & Word Limit */}
+          {/* Grade Dropdown (S/U or A–F) & Character Limit */}
           <div className="form-grid-2">
             <div className="form-group">
-              <label className="form-label" htmlFor="grade-input">
+              <label className="form-label" htmlFor="grade-select">
                 Grade
-                <span className="hint">1.0 (best) – 5.0 (worst)</span>
+                <span className="hint">S/U or A–F</span>
               </label>
-              <input
-                id="grade-input"
-                type="number"
-                step="0.1"
-                min="1.0"
-                max="5.0"
-                className="form-input"
-                placeholder="e.g. 1.0 or 2.3"
+              <select
+                id="grade-select"
+                className="form-select"
                 value={grade}
                 onChange={e => setGrade(e.target.value)}
-              />
+              >
+                <optgroup label="Younger Students (2-Level Scale)">
+                  <option value="S">S – Satisfactory</option>
+                  <option value="U">U – Unsatisfactory</option>
+                </optgroup>
+                <optgroup label="Older Students (American A–F Scale)">
+                  <option value="A">A – Outstanding / Excellent</option>
+                  <option value="B">B – Good / Above Average</option>
+                  <option value="C">C – Average / Satisfactory</option>
+                  <option value="D">D – Below Average / Developing</option>
+                  <option value="F">F – Unsatisfactory / Failing</option>
+                </optgroup>
+              </select>
             </div>
 
             <div className="form-group">
@@ -922,6 +927,7 @@ export default function App() {
                           setGeneratedText(entry.text);
                           setStudentName(entry.studentName);
                           if (entry.gender) setGender(entry.gender);
+                          if (entry.grade) setGrade(entry.grade);
                           showToast(`Loaded evaluation for ${entry.studentName}`);
                         }}
                         title="Load into editor"
