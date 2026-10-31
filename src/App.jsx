@@ -8,6 +8,8 @@ import {
 
 export default function App() {
   const abortControllerRef = useRef(null);
+  const retryTimerRef = useRef(null);
+  const userCancelledRef = useRef(false);
 
   // --- Persistent Settings (Multi-Provider Support) ---
   const [selectedProvider, setSelectedProvider] = useState(() => {
@@ -92,12 +94,26 @@ export default function App() {
   // Generation & Output State
   const [generatedText, setGeneratedText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [currentAttempt, setCurrentAttempt] = useState(0);
+  const [attemptStatusText, setAttemptStatusText] = useState('');
+
+  // Auto-retry settings (Defaults to true, up to 8 attempts)
+  const [autoRetry, setAutoRetry] = useState(() => {
+    const saved = localStorage.getItem('evalcraft_auto_retry');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [maxRetries, setMaxRetries] = useState(() => {
+    const saved = localStorage.getItem('evalcraft_max_retries');
+    return saved ? Number(saved) : 8;
+  });
 
   // UI state & Modal editing state
   const [showSettings, setShowSettings] = useState(false);
   const [modalProvider, setModalProvider] = useState('gemini');
   const [modalKey, setModalKey] = useState('');
   const [modalModel, setModalModel] = useState('gemini-3.8-flash');
+  const [modalAutoRetry, setModalAutoRetry] = useState(true);
+  const [modalMaxRetries, setModalMaxRetries] = useState(8);
   const [toast, setToast] = useState('');
 
   // Sync modal state when settings modal opens
@@ -107,6 +123,8 @@ export default function App() {
       const prov = validProvs.includes(selectedProvider) ? selectedProvider : 'gemini';
       setModalProvider(prov);
       setModalKey(apiKeys[prov] || '');
+      setModalAutoRetry(autoRetry);
+      setModalMaxRetries(maxRetries);
       const provObj = LLM_PROVIDERS.find(p => p.id === prov);
       const isKnownModel = provObj?.models.some(m => m.id === selectedModel);
       if (!isKnownModel && provObj && provObj.models.length > 0) {
@@ -115,7 +133,7 @@ export default function App() {
         setModalModel(selectedModel);
       }
     }
-  }, [showSettings, selectedProvider, selectedModel, apiKeys]);
+  }, [showSettings, selectedProvider, selectedModel, apiKeys, autoRetry, maxRetries]);
 
   // Apply Theme
   useEffect(() => {
@@ -129,9 +147,11 @@ export default function App() {
   }, [savedEvaluations]);
 
   // Save Settings
-  const handleSaveSettings = (provId, newKey, newModel) => {
+  const handleSaveSettings = (provId, newKey, newModel, autoRetryVal = modalAutoRetry, maxRetriesVal = modalMaxRetries) => {
     setSelectedProvider(provId);
     setSelectedModel(newModel);
+    setAutoRetry(autoRetryVal);
+    setMaxRetries(maxRetriesVal);
 
     const updatedKeys = {
       ...apiKeys,
@@ -142,6 +162,8 @@ export default function App() {
     localStorage.setItem('evalcraft_provider', provId);
     localStorage.setItem('evalcraft_api_keys', JSON.stringify(updatedKeys));
     localStorage.setItem('evalcraft_gemini_model', newModel);
+    localStorage.setItem('evalcraft_auto_retry', String(autoRetryVal));
+    localStorage.setItem('evalcraft_max_retries', String(maxRetriesVal));
     if (provId === 'gemini') {
       localStorage.setItem('evalcraft_gemini_key', newKey);
     }
@@ -205,15 +227,22 @@ export default function App() {
   const charCount = generatedText.length;
 
   const handleCancelGeneration = () => {
+    userCancelledRef.current = true;
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
     setIsGenerating(false);
+    setCurrentAttempt(0);
+    setAttemptStatusText('');
     showToast('Generation cancelled.');
   };
 
-  // --- Generation Logic ---
+  // --- Generation Logic with Automated Retry Loop ---
   const handleGenerate = async (refinementInstruction = null) => {
     // If generation is already underway, clicking toggles cancel/stop!
     if (isGenerating) {
@@ -221,9 +250,9 @@ export default function App() {
       return;
     }
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    userCancelledRef.current = false;
     setIsGenerating(true);
+    setAttemptStatusText('Contacting AI service...');
 
     const parsedGrade = parseFloat(grade) || 1.0;
     const firstNameOnly = studentName.trim().split(/\s+/)[0] || 'The student';
@@ -247,42 +276,128 @@ export default function App() {
       previousEvaluation: generatedText
     };
 
-    // Auto timeout after 40 seconds to prevent getting permanently stuck
-    const timeoutId = setTimeout(() => {
-      if (abortControllerRef.current === controller) {
-        controller.abort();
-        showToast('Generation timed out. You can retry with a different model.');
+    // Demo Mode: generate locally without API key
+    if (!activeApiKey || activeApiKey.trim() === '') {
+      try {
+        const result = await generateStudentEvaluation(params);
+        setGeneratedText(result);
+        showToast(refinementInstruction ? 'Evaluation updated!' : 'Evaluation generated!');
+      } catch (err) {
+        alert(`Generation failed: ${err.message}`);
+      } finally {
+        setIsGenerating(false);
+        setCurrentAttempt(0);
+        setAttemptStatusText('');
       }
-    }, 40000);
-
-    try {
-      const result = await generateStudentEvaluation(params, controller.signal);
-      setGeneratedText(result);
-      showToast(refinementInstruction ? 'Evaluation updated!' : 'Evaluation generated!');
-    } catch (err) {
-      if (err.name === 'AbortError' || controller.signal.aborted) {
-        showToast('Generation cancelled.');
-        return;
-      }
-      console.error(err);
-      if (err.message && err.message.includes('prepayment credits are depleted')) {
-        alert(
-          `Google AI Studio Billing Notice:\n\n` +
-          `Your Gemini API key belongs to a Google Cloud project with depleted prepay credits.\n\n` +
-          `Quick Options:\n` +
-          `1. In Google AI Studio (aistudio.google.com/app/apikey), click 'Create in NEW project' for a 100% free tier key.\n` +
-          `2. Or switch to Groq (console.groq.com) or OpenRouter (openrouter.ai) in Settings for instant free generation!`
-        );
-      } else {
-        alert(`Generation failed: ${err.message}\n\nPlease check your ${currentProviderObj.name} API key in Settings.`);
-      }
-    } finally {
-      clearTimeout(timeoutId);
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-      }
-      setIsGenerating(false);
+      return;
     }
+
+    const maxAttempts = autoRetry ? Math.max(1, maxRetries) : 1;
+    let attempt = 1;
+
+    while (attempt <= maxAttempts && !userCancelledRef.current) {
+      setCurrentAttempt(attempt);
+      setAttemptStatusText(attempt === 1 ? 'Generating evaluation narrative...' : `Retrying (Attempt ${attempt} of ${maxAttempts})...`);
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      // 25 second timeout per attempt for responsive auto-retry
+      let isTimeout = false;
+      const timeoutId = setTimeout(() => {
+        if (abortControllerRef.current === controller) {
+          isTimeout = true;
+          controller.abort();
+        }
+      }, 25000);
+
+      try {
+        const result = await generateStudentEvaluation(params, controller.signal);
+        clearTimeout(timeoutId);
+
+        if (userCancelledRef.current) {
+          return;
+        }
+
+        if (!result || !result.trim()) {
+          throw new Error('Received empty response from AI.');
+        }
+
+        setGeneratedText(result);
+        showToast(refinementInstruction ? 'Evaluation updated!' : 'Evaluation generated!');
+        setIsGenerating(false);
+        setCurrentAttempt(0);
+        setAttemptStatusText('');
+        return; // Success!
+      } catch (err) {
+        clearTimeout(timeoutId);
+
+        // If user manually clicked cancel, exit immediately
+        if (userCancelledRef.current || (err.name === 'AbortError' && !isTimeout)) {
+          handleCancelGeneration();
+          return;
+        }
+
+        console.warn(`Attempt ${attempt} error:`, err);
+
+        // Check for non-retryable errors
+        const isDepleted = err.message && err.message.includes('prepayment credits are depleted');
+        const isAuthError = err.message && (
+          err.message.includes('API_KEY_INVALID') ||
+          err.message.includes('API key not valid') ||
+          err.message.includes('status 401') ||
+          err.message.includes('Unauthorized') ||
+          err.message.includes('invalid api key')
+        );
+
+        if (isDepleted) {
+          alert(
+            `Google AI Studio Billing Notice:\n\n` +
+            `Your Gemini API key belongs to a Google Cloud project with depleted prepay credits.\n\n` +
+            `Quick Options:\n` +
+            `1. In Google AI Studio (aistudio.google.com/app/apikey), click 'Create in NEW project' for a 100% free tier key.\n` +
+            `2. Or switch to Groq (console.groq.com) or OpenRouter (openrouter.ai) in Settings for instant free generation!`
+          );
+          break;
+        }
+
+        if (isAuthError) {
+          alert(`Authentication Error: ${err.message}\n\nPlease check your ${currentProviderObj.name} API key in Settings.`);
+          break;
+        }
+
+        // Retryable error: check if we have remaining attempts
+        if (attempt < maxAttempts && !userCancelledRef.current) {
+          const failureReason = isTimeout ? 'Timed out (25s)' : (err.message?.replace(/^Error:\s*/, '') || 'Temporary network/server glitch');
+          setAttemptStatusText(`Attempt ${attempt} had an issue (${failureReason.slice(0, 32)}). Retrying in 2s (Attempt ${attempt + 1}/${maxAttempts})...`);
+          showToast(`Attempt ${attempt} issue: ${failureReason.slice(0, 32)}. Auto-retrying (${attempt + 1}/${maxAttempts})...`);
+
+          attempt++;
+          // Wait 2 seconds before next attempt (cancellable)
+          await new Promise(resolve => {
+            retryTimerRef.current = setTimeout(resolve, 2000);
+          });
+          retryTimerRef.current = null;
+
+          if (userCancelledRef.current) {
+            return;
+          }
+        } else {
+          // Reached max attempts
+          const lastErr = isTimeout ? 'Request timed out after 25s' : (err.message || 'Unknown error');
+          alert(
+            `Generation did not succeed after ${maxAttempts} attempt${maxAttempts > 1 ? 's' : ''}.\n\n` +
+            `Last error: ${lastErr}\n\n` +
+            `Tip: Free-tier servers may be temporarily congested. You can switch to another free provider in Settings (e.g. Groq or Gemini 3.8 Flash) or try again.`
+          );
+          break;
+        }
+      }
+    }
+
+    setIsGenerating(false);
+    setCurrentAttempt(0);
+    setAttemptStatusText('');
   };
 
   // Copy to clipboard
@@ -637,9 +752,12 @@ export default function App() {
                   className={`btn btn-sm ${isGenerating ? 'btn-cancel' : 'btn-primary'}`}
                   onClick={() => handleGenerate()}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 14px' }}
-                  title={isGenerating ? 'Click to cancel stuck generation' : 'Generate verbal evaluation'}
+                  title={isGenerating ? 'Click to cancel auto-retry generation' : 'Generate verbal evaluation'}
                 >
-                  {isGenerating ? '⏹️ Cancel' : '✨ Generate'}
+                  {isGenerating 
+                    ? `⏹️ Cancel ${currentAttempt > 1 ? `(Try ${currentAttempt})` : ''}` 
+                    : '✨ Generate'
+                  }
                 </button>
                 <button
                   id="save-eval-btn"
@@ -676,6 +794,19 @@ export default function App() {
                 )}
               </div>
             </div>
+
+            {/* Real-time Generation & Auto-retry Status Banner */}
+            {isGenerating && (
+              <div className="generating-indicator" id="generating-indicator">
+                <span className="spinner-dot" />
+                <span style={{ flex: 1 }}>{attemptStatusText || 'Generating evaluation narrative...'}</span>
+                {currentAttempt > 1 && (
+                  <span className="retry-pill">
+                    Attempt {currentAttempt} of {autoRetry ? maxRetries : 1}
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Editable Output Textarea */}
             <textarea
@@ -945,6 +1076,48 @@ export default function App() {
                    'Custom model configuration active.'}
                 </p>
               </div>
+
+              {/* Auto-Retry on Error / Timeout */}
+              <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <label htmlFor="auto-retry-checkbox" style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>🔁 Auto-retry on Error or Timeout</span>
+                    </label>
+                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                      Keeps retrying if the free API times out, returns an error, or gives an empty response.
+                    </p>
+                  </div>
+                  <input
+                    id="auto-retry-checkbox"
+                    type="checkbox"
+                    checked={modalAutoRetry}
+                    onChange={e => setModalAutoRetry(e.target.checked)}
+                    style={{ width: '18px', height: '18px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                  />
+                </div>
+
+                {modalAutoRetry && (
+                  <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label htmlFor="max-retries-input" style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Maximum retry attempts:
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        id="max-retries-input"
+                        type="number"
+                        min="2"
+                        max="15"
+                        value={modalMaxRetries}
+                        onChange={e => setModalMaxRetries(Math.max(1, Math.min(15, Number(e.target.value))))}
+                        style={{ width: '64px', textAlign: 'center', padding: '4px 8px' }}
+                        className="form-input"
+                      />
+                      <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>attempts</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="modal-footer">
@@ -954,7 +1127,7 @@ export default function App() {
               <button 
                 id="save-settings-btn"
                 className="btn btn-primary" 
-                onClick={() => handleSaveSettings(modalProvider, modalKey, modalModel)}
+                onClick={() => handleSaveSettings(modalProvider, modalKey, modalModel, modalAutoRetry, modalMaxRetries)}
               >
                 Save Settings
               </button>
