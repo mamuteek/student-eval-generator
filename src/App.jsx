@@ -61,7 +61,14 @@ export default function App() {
   
   // Grade as float value from 1.0 (best) to 5.0 (worst)
   const [grade, setGrade] = useState(1.5);
-  const [wordLimit, setWordLimit] = useState(120);
+  const [charLimit, setCharLimit] = useState(() => {
+    const saved = localStorage.getItem('evalcraft_char_limit');
+    return saved ? Number(saved) : 800;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('evalcraft_char_limit', charLimit);
+  }, [charLimit]);
 
   // 5 Categories State: { [catId]: { score: 1-5, chips: string[] } }
   const [categories, setCategories] = useState(() => {
@@ -229,7 +236,7 @@ export default function App() {
       gender,
       subject: 'Music',
       grade: parsedGrade.toFixed(1),
-      wordLimit,
+      charLimit,
       tone: 'Warm, balanced, and constructive',
       perspective: 'To Parents (3rd person, first name only, age 6-12)',
       categories,
@@ -298,6 +305,8 @@ export default function App() {
       grade: parsedGrade.toFixed(1),
       text: generatedText,
       wordCount,
+      charCount,
+      charLimit,
       timestamp: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     };
 
@@ -426,22 +435,22 @@ export default function App() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">
-                Word limit
-                <span className="hint">{wordLimit} words</span>
+              <label className="form-label" htmlFor="char-limit-slider">
+                Character limit
+                <span className="hint">{charLimit} characters</span>
               </label>
               <div className="slider-container">
                 <input
-                  id="word-limit-slider"
+                  id="char-limit-slider"
                   type="range"
-                  min="50"
-                  max="250"
-                  step="10"
+                  min="200"
+                  max="2500"
+                  step="25"
                   className="range-slider"
-                  value={wordLimit}
-                  onChange={e => setWordLimit(Number(e.target.value))}
+                  value={charLimit}
+                  onChange={e => setCharLimit(Number(e.target.value))}
                 />
-                <span className="slider-val-badge">{wordLimit} w</span>
+                <span className="slider-val-badge">{charLimit} c</span>
               </div>
             </div>
           </div>
@@ -681,18 +690,22 @@ export default function App() {
             <div className="output-meta-bar">
               <div className="stats-group">
                 <span className="stat-item">
-                  Words: <span className="stat-val">{wordCount}</span> / {wordLimit} target
+                  Characters: <span className="stat-val" style={{ color: charCount > charLimit ? 'var(--danger)' : undefined }}>{charCount}</span> / {charLimit} max
                 </span>
                 <span className="stat-item">
-                  Characters: <span className="stat-val">{charCount}</span>
+                  Words: <span className="stat-val">{wordCount}</span>
                 </span>
               </div>
               <div>
-                {generatedText && (
-                  <span style={{ color: 'var(--success)', fontWeight: '600' }}>
-                    ✓ Ready to copy
+                {charCount > charLimit ? (
+                  <span style={{ color: 'var(--danger)', fontWeight: '600', fontSize: '12px' }}>
+                    ⚠️ Exceeds limit by {charCount - charLimit} chars
                   </span>
-                )}
+                ) : generatedText ? (
+                  <span style={{ color: 'var(--success)', fontWeight: '600', fontSize: '12px' }}>
+                    ✓ Within limit ({charLimit - charCount} left)
+                  </span>
+                ) : null}
               </div>
             </div>
 
@@ -706,7 +719,7 @@ export default function App() {
                   id="refine-shorter-btn"
                   className="refine-btn"
                   disabled={isGenerating}
-                  onClick={() => handleGenerate('Make the evaluation approximately 25% shorter while keeping the core message intact.')}
+                  onClick={() => handleGenerate(`Shorten the evaluation so it strictly stays within ${charLimit} characters while preserving the core observations.`)}
                 >
                   🤏 Make Shorter
                 </button>
@@ -769,7 +782,7 @@ export default function App() {
                   <div key={entry.id} className="history-item">
                     <div className="history-info">
                       <span className="history-name">{entry.studentName}</span>
-                      <span className="history-meta">{entry.gender || 'Student'} • Grade {entry.grade} • {entry.wordCount} words • {entry.timestamp}</span>
+                      <span className="history-meta">{entry.gender || 'Student'} • Grade {entry.grade} • {entry.charCount || entry.text?.length || 0} chars • {entry.timestamp}</span>
                     </div>
                     <div className="history-actions">
                       <button

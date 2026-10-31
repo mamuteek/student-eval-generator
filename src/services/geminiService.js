@@ -122,7 +122,7 @@ export async function generateStudentEvaluation(params, signal = null) {
     gender = 'Female',
     subject = 'Music',
     grade = 1.0,
-    wordLimit = 120,
+    charLimit = 800,
     tone = 'Warm, balanced, and constructive',
     perspective = 'To Parents (3rd person, referring to student by first name only)',
     categories = {},
@@ -143,7 +143,7 @@ export async function generateStudentEvaluation(params, signal = null) {
     gender,
     subject: 'Music',
     grade,
-    wordLimit,
+    charLimit: charLimit || (params.wordLimit ? Math.round(params.wordLimit * 6.5) : 800),
     tone,
     perspective,
     categories,
@@ -353,7 +353,7 @@ STUDENT PROFILE:
 - Student Gender: ${p.gender || 'Female'} (CRITICAL GRAMMAR RULE: Use ${pronouns} pronouns strictly throughout the evaluation. For example: "${p.studentName} showed great enthusiasm when ${subjectPronoun} practiced...", "in ${possessivePronoun} ensemble work...").
 - Subject: Music (Music education, singing, rhythm, listening, instruments, and ensemble activities for kids aged 6–12).
 - Internal Academic Baseline: Qualitative performance benchmark is grade ${p.grade} (Reference: 1.0 is highest/outstanding, 5.0 is failing. STRICT REQUIREMENT: This number is solely for your internal calibration of academic standing; DO NOT write the number, grade, or scale anywhere in the evaluation narrative!).
-- Desired Length: Approximately ${p.wordLimit} words (Strict constraint: stay within ${Math.max(30, p.wordLimit - 20)} to ${p.wordLimit + 20} words).
+- STRICT Character Limit: Maximum ${p.charLimit} characters (including all letters, spaces, and punctuation). The narrative MUST NOT exceed ${p.charLimit} characters. Target length: between ${Math.round(p.charLimit * 0.85)} and ${p.charLimit} characters.
 - Target Audience & Voice: Written to the child's parents in the third person (referring to the child by first name and using accurate ${p.gender || 'Female'} pronouns).
 - Tone: Warm, constructive, encouraging, age-appropriate for 6–12 year olds.
 
@@ -379,7 +379,7 @@ EVALUATION WRITING GUIDELINES:
 3. Natural, Flowing Prose: Do NOT mechanically list categories or use bullet points. Blend the teacher's keywords and observations into smooth, authentic, human prose.
 4. Pronoun and Grammar Accuracy: Maintain strict consistency with the student's gender (${p.gender || 'Female'}). Use only ${pronouns}.
 5. Constructive Framing: Frame challenges as opportunities for continued growth, maintaining dignity and encouragement.
-6. Structural Completeness: You must provide a complete, well-rounded narrative that brings every thought and sentence to a proper, grammatical conclusion. Never stop abruptly or leave sentences incomplete.
+6. Strict Character Enforcement & Completeness: The narrative MUST strictly stay within the maximum limit of ${p.charLimit} characters (including spaces). Carefully plan your sentences and conclude thoughts naturally and grammatically before hitting the limit. Never exceed the character ceiling, and never stop abruptly or leave a sentence incomplete.
 7. Output Format: Return ONLY the final verbal evaluation narrative. No greeting header ("Dear Parents,"), no title, no meta commentary, no quotation marks.
 `.trim();
 }
@@ -400,7 +400,7 @@ function cleanGeneratedText(text) {
 // Local mock generator for testing without an API key
 function generateLocalDemoEvaluation(p) {
   const firstName = p.studentName ? p.studentName.trim().split(/\s+/)[0] : 'The student';
-  const wordTarget = p.wordLimit || 120;
+  const charLimit = p.charLimit || (p.wordLimit ? Math.round(p.wordLimit * 6.5) : 800);
   const isMale = (p.gender || '').toLowerCase() === 'male';
   const subjPronoun = isMale ? 'he' : 'she';
   const subjPronounCap = isMale ? 'He' : 'She';
@@ -429,11 +429,33 @@ function generateLocalDemoEvaluation(p) {
     ? p.goals.join(', ')
     : 'practicing rhythm patterns and singing with confidence in small ensembles';
 
-  const sample = `${firstName} has had a joyful and productive term in Music. Demonstrating an admirable appreciation for musical activities, ${subjPronoun} consistently participates with ${strengths}. During ensemble playing and class singing, ${firstName} is a thoughtful and respectful listener who collaborates cooperatively with ${possPronoun} peers. While making steady progress throughout the semester, continuing to work on ${growth} will help ${objPronoun} build even greater musical independence. For the upcoming term, ${firstName} is encouraged to focus on ${goals}. With ${possPronoun} positive attitude and dedication, ${subjPronoun} is well positioned for continued musical growth and enjoyment.`;
+  let sample = `${firstName} has had a joyful and productive term in Music. Demonstrating an admirable appreciation for musical activities, ${subjPronoun} consistently participates with ${strengths}. During ensemble playing and class singing, ${firstName} is a thoughtful and respectful listener who collaborates cooperatively with ${possPronoun} peers. While making steady progress throughout the semester, continuing to work on ${growth} will help ${objPronoun} build even greater musical independence. For the upcoming term, ${firstName} is encouraged to focus on ${goals}. With ${possPronoun} positive attitude and dedication, ${subjPronoun} is well positioned for continued musical growth and enjoyment.`;
 
-  const words = sample.split(/\s+/);
-  if (words.length > wordTarget + 10) {
-    return words.slice(0, wordTarget).join(' ') + '.';
+  // Enforce strict character limit without cutting mid-sentence
+  if (sample.length > charLimit) {
+    const sentences = sample.match(/[^.!?]+[.!?]+/g) || [];
+    let trimmed = '';
+    for (const sentence of sentences) {
+      if ((trimmed + (trimmed ? ' ' : '') + sentence.trim()).length <= charLimit) {
+        trimmed = trimmed ? `${trimmed} ${sentence.trim()}` : sentence.trim();
+      } else {
+        break;
+      }
+    }
+    if (trimmed.length >= 100) {
+      sample = trimmed;
+    } else {
+      // Fallback slice to last word boundary
+      sample = sample.slice(0, charLimit);
+      const lastSpace = sample.lastIndexOf(' ');
+      if (lastSpace > 0) {
+        sample = sample.slice(0, lastSpace);
+      }
+      if (!sample.endsWith('.')) {
+        sample += '.';
+      }
+    }
   }
+
   return sample;
 }
